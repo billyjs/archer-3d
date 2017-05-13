@@ -9,21 +9,24 @@
             width: 100%;
             height: 100%;
         }
+
         body {
             background-color: #ffffff;
             margin: 0;
             overflow: hidden;
             font-family: arial;
         }
+
         #blocker {
             position: absolute;
             width: 100%;
             height: 100%;
-            background-color: rgba(0,0,0,0.5);
+            background-color: rgba(0, 0, 0, 0.5);
             display: flex;
             justify-content: center;
             align-items: center;
         }
+
         #instructions {
             color: #ffffff;
             text-align: center;
@@ -36,7 +39,7 @@
 
     <div id="instructions">
         <span style="font-size:40px">Click to play</span>
-        <br />
+        <br/>
         (W, A, S, D = Move, SPACE = Jump, MOUSE = Look around)
     </div>
 
@@ -47,14 +50,19 @@
 
 <script>
     var scene, camera, renderer;
+    var topCamera;
     var geometry, material, mesh;
     var light;
     var controls;
+    var raycaster, arrow, dirArrow, velArrow, forArrow;
+    var lastMove;
 
     var objects = [];
 
     var movement = {left: false, right: false, forward: false, backward: false};
     var velocity = new THREE.Vector3();
+
+    var prevTime = performance.now();
 
     var blocker = document.getElementById("blocker");
     var instructions = document.getElementById("instructions");
@@ -73,7 +81,7 @@
         console.log("pointer lock init");
         var element = document.body;
 
-        var pointerLockChange = function(event) {
+        var pointerLockChange = function (event) {
             if (document.pointerLockElement === element) {
                 controls.enabled = true;
                 blocker.style.display = "none"; // hide blocker
@@ -86,11 +94,11 @@
             }
         };
 
-        var pointerLockError = function(event) {
+        var pointerLockError = function (event) {
             instructions.style.display = "";
         };
 
-        var clickScreen = function(event) {
+        var clickScreen = function (event) {
             instructions.style.display = "none";
             element.requestPointerLock();
             console.log("click");
@@ -103,6 +111,8 @@
     }
 
     function init() {
+        topCamera = new THREE.OrthographicCamera(window.innerWidth / -8, window.innerWidth / 8, window.innerHeight / 4, window.innerHeight / -4, 1, 100);
+
         camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerWidth, 1, 1000);
 
         scene = new THREE.Scene();
@@ -115,23 +125,32 @@
         controls = new THREE.PointerLockControls(camera);
         scene.add(controls.getObject());
 
-        geometry = new THREE.PlaneGeometry( 2000, 2000, 100, 100 );
-        geometry.rotateX( - Math.PI / 2 );
-        for ( var i = 0, l = geometry.vertices.length; i < l; i ++ ) {
-            var vertex = geometry.vertices[ i ];
+        raycaster = new THREE.Raycaster(new THREE.Vector3(), new THREE.Vector3(), 0, 2);
+
+        geometry = new THREE.PlaneGeometry(2000, 2000, 100, 100);
+        geometry.rotateX(-Math.PI / 2);
+        for (var i = 0, l = geometry.vertices.length; i < l; i++) {
+            var vertex = geometry.vertices[i];
             vertex.x += Math.random() * 20 - 10;
             vertex.y += Math.random() * 2;
             vertex.z += Math.random() * 20 - 10;
         }
-        for ( var i = 0, l = geometry.faces.length; i < l; i ++ ) {
-            var face = geometry.faces[ i ];
-            face.vertexColors[ 0 ] = new THREE.Color().setHSL( Math.random() * 0.3 + 0.5, 0.75, Math.random() * 0.25 + 0.75 );
-            face.vertexColors[ 1 ] = new THREE.Color().setHSL( Math.random() * 0.3 + 0.5, 0.75, Math.random() * 0.25 + 0.75 );
-            face.vertexColors[ 2 ] = new THREE.Color().setHSL( Math.random() * 0.3 + 0.5, 0.75, Math.random() * 0.25 + 0.75 );
+        for (var i = 0, l = geometry.faces.length; i < l; i++) {
+            var face = geometry.faces[i];
+            face.vertexColors[0] = new THREE.Color().setHSL(Math.random() * 0.3 + 0.5, 0.75, Math.random() * 0.25 + 0.75);
+            face.vertexColors[1] = new THREE.Color().setHSL(Math.random() * 0.3 + 0.5, 0.75, Math.random() * 0.25 + 0.75);
+            face.vertexColors[2] = new THREE.Color().setHSL(Math.random() * 0.3 + 0.5, 0.75, Math.random() * 0.25 + 0.75);
         }
-        material = new THREE.MeshBasicMaterial( { vertexColors: THREE.VertexColors } );
-        mesh = new THREE.Mesh( geometry, material );
-        scene.add( mesh );
+        material = new THREE.MeshBasicMaterial({vertexColors: THREE.VertexColors});
+        mesh = new THREE.Mesh(geometry, material);
+        scene.add(mesh);
+
+        geometry = new THREE.BoxGeometry(50, 100, 10);
+        material = new THREE.MeshBasicMaterial({color: 0x00ff00});
+        var cube = new THREE.Mesh(geometry, material);
+        cube.position.set(-20, 0, 0);
+        scene.add(cube);
+        objects.push(cube);
 
         renderer = new THREE.WebGLRenderer();
         renderer.setClearColor(0xffffff);
@@ -139,10 +158,12 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
+        renderer.autoClear = false;
+
 
         //
-        window.addEventListener( 'resize', onWindowResize, false );
-        document.addEventListener( 'keydown', onKeyDown, false );
+        window.addEventListener('resize', onWindowResize, false);
+        document.addEventListener('keydown', onKeyDown, false);
         document.addEventListener('keyup', onKeyUp, false);
     }
     //
@@ -154,7 +175,8 @@
                 break;
             case 37: // left
             case 65: // a
-                movement.left = true; break;
+                movement.left = true;
+                break;
             case 40: // down
             case 83: // s
                 movement.backward = true;
@@ -171,10 +193,10 @@
     }
     //
     function onKeyUp(event) {
-        switch( event.keyCode ) {
+        switch (event.keyCode) {
             case 38: // up
             case 87: // w
-                movement.fowards = false;
+                movement.forward = false;
                 break;
             case 37: // left
             case 65: // a
@@ -191,7 +213,7 @@
         }
     }
     //
-    function onWindowResize( event ) {
+    function onWindowResize(event) {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
 
@@ -199,15 +221,115 @@
     }
     //
     function animate() {
-        requestAnimationFrame( animate );
+        requestAnimationFrame(animate);
         render();
     }
+    //
     function render() {
         if (controls.enabled) {
+            var time = performance.now();
+            var delta = (time - prevTime) / 1000;
 
+            // movement friction
+            velocity.z -= velocity.z * 10.0 * delta;
+            velocity.x -= velocity.x * 10.0 * delta;
+
+            // direction of view
+            var direction = camera.getWorldDirection();
+            direction.y = 0;
+            scene.remove(arrow);
+            arrow = new THREE.ArrowHelper(direction, camera.getWorldPosition(), 100, 0x0000ff);
+            scene.add(arrow);
+
+            // player position
+            var pos = controls.getObject().position;
+            topCamera.position.copy(pos);
+            topCamera.position.y = 80;
+            topCamera.lookAt(pos);
+
+            var moving = false;
+
+            if (movement.forward) {
+                velocity.z -= 100.0 * delta;
+                moving = true;
+            }
+
+            if (movement.backward) {
+                velocity.z += 100.0 * delta;
+                moving = true;
+            }
+
+            if (movement.left) {
+                velocity.x -= 100.0 * delta;
+                moving = true;
+            }
+
+            if (movement.right) {
+                velocity.x += 100.0 * delta;
+                moving = true;
+            }
+
+            var angle = direction.angleTo(new THREE.Vector3(0, 0, -1));
+            if (direction.x > 0) {
+                angle = 2 * Math.PI - angle;
+            }
+            ;
+
+            var move = new THREE.Vector3().copy(velocity);
+            move.applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+
+            scene.remove(velArrow);
+            velArrow = new THREE.ArrowHelper(move, pos, velocity.length(), 0xff0000);
+            scene.add(velArrow);
+
+            console.log(velocity.length());
+
+//            move = move.normalize();
+            raycaster.set(pos, move);
+            var intersections = raycaster.intersectObjects(objects);
+
+            console.log(intersections);
+
+            // movement restricted
+            if (intersections.length !== 0) {
+                var normal = intersections[0].face.normal;
+                var invNormal = new THREE.Vector3().copy(normal);
+                invNormal.negate();
+                var copy = new THREE.Vector3().copy(move);
+                var proj = move.projectOnVector(invNormal);
+                var test = copy.sub(proj);
+                scene.remove(dirArrow);
+                dirArrow = new THREE.ArrowHelper(test, intersections[0].point, 50, 0x2299ff);
+                scene.add(dirArrow);
+                console.log(move);
+                move = move.copy(test);
+//                move = new THREE.Vector3(0,0,0);
+//                velocity = new THREE.Vector3(0,0,0);
+                console.log(move);
+                console.log("projected");
+            } else {
+
+            }
+
+            var translation = new THREE.Vector3().copy(move);
+            translation.applyAxisAngle(new THREE.Vector3(0, 1, 0), -angle);
+
+            console.log(translation.z * delta);
+
+            controls.getObject().translateZ(translation.z * delta);
+            controls.getObject().translateX(translation.x * delta);
+
+            prevTime = time;
+            lastMove = move;
         }
 
+        renderer.clear();
+
+        renderer.setViewport(0, 0, window.innerWidth / 2, window.innerHeight);
         renderer.render(scene, camera);
+
+        renderer.setViewport(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
+        renderer.render(scene, topCamera);
     }
 </script>
 
