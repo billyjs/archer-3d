@@ -70,6 +70,16 @@ function init() {
     // setup scene
     scene = new THREE.Scene();
     scene.fog = new THREE.Fog(0x010101, 0, 750);
+    scene.background = new THREE.CubeTextureLoader()
+        .setPath( 'resources/textures/' )
+        .load( [
+            'space5.png',
+            'space1.png',
+            'space3.png',
+            'space6.png',
+            'space4.png',
+            'space2.png'
+        ] );
 
     // setup mouse controls
     pointerLockInit();
@@ -171,7 +181,7 @@ function audioInit() {
 
 function lightInit() {
     // TODO make lights look better, shadows, etc
-    light = new THREE.AmbientLight(0x404040, 0.3);
+    light = new THREE.AmbientLight(0x404040, 0.7);
     scene.add(light);
 
     light = new THREE.PointLight(0xffffff, 1, 100);
@@ -180,8 +190,6 @@ function lightInit() {
     light.shadow.camera.near = 0.3;
     light.shadow.camera.far = 50;
     scene.add(light);
-
-
 }
 
 function meshesInit() {
