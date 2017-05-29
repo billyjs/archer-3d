@@ -358,7 +358,7 @@ function onMouseDown(event) {
         case 0: // left
             drawingBow = true;
             break;
-        case 2: //right
+        case 2: // right
             drawingBow = false;
             bowPower = 0; // reduce power so arrow doesn't fire
             break;
@@ -481,6 +481,9 @@ function update() {
         positionBow(bowPower);
     } else if (bowPower > MIN_ARROW_POWER) {
         fireArrow();
+    } else {
+        bowPower = 0;
+        positionBow(bowPower);
     }
 
     // update player movement
