@@ -69,7 +69,7 @@ function init() {
 
     // setup scene
     scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0x010101, 0, 750);
+    scene.fog = new THREE.Fog(0x010101, 200, 300);
     scene.background = new THREE.CubeTextureLoader()
         .setPath( 'resources/textures/' )
         .load( [
@@ -104,7 +104,7 @@ function init() {
     renderer.setClearColor(0x010101);
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.type = THREE.BasicShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.shadowMap.enabled = true;
     document.body.appendChild(renderer.domElement);
 
@@ -128,6 +128,7 @@ function cameraInit() {
     var aspect = window.innerWidth / window.innerHeight;
     var fov = 90; // TODO calculate dynamic fov
     camera = new THREE.PerspectiveCamera(fov, aspect, 0.1, 1000);
+    camera.position.y += 2;
 }
 
 function pointerLockInit() {
@@ -200,7 +201,7 @@ function meshesInit() {
 }
 
 function createTrees(radius) {
-    var files = ["./tree1.json", "./tree1.json", "./tree1.json", "./tree1.json", "./tree1.json"];
+    var files = ["./tree1.json", "./tree1.json", "./tree1.json", "./tree1.json", "./tree1.json", "./tree1.json"];
     for (var i = 0; i < files.length; i++) {
         var theta = i * 2 * Math.PI / files.length;
         var x = radius * Math.cos(theta);
@@ -214,7 +215,8 @@ function createTree(file, x, y) {
     var loader = new THREE.JSONLoader();
     loader.load(file, function(geometry, materials) {
         var material = new THREE.MeshPhongMaterial({
-            color: 0x8B4513
+            color: 0x8B4513,
+            side: THREE.DoubleSide
         });
         var tree = new THREE.Mesh(geometry, material);
         tree.castShadow = true;
@@ -322,24 +324,68 @@ function createFloorPlane() {
     //         });
     //     });
     // });
-    geometry = new THREE.PlaneGeometry(500,500,200,200);
-    geometry.rotateX(-Math.PI/2);
-    for (var i = 0, l = geometry.faces.length; i < l; i++) {
-        var face = geometry.faces[i];
-        face.vertexColors[0] = new THREE.Color().setHSL(Math.random() * 0.15 + 0.35, 0.75, Math.random() * 0.45 + 0.15);
-        face.vertexColors[1] = new THREE.Color().setHSL(Math.random() * 0.15 + 0.35, 0.75, Math.random() * 0.45 + 0.15);
-        face.vertexColors[2] = new THREE.Color().setHSL(Math.random() * 0.15 + 0.35, 0.75, Math.random() * 0.45 + 0.15);
-    }
-    for ( var i = 0, l = geometry.vertices.length; i < l; i ++ ) {
-        var vertex = geometry.vertices[ i ];
-        vertex.x += Math.random() * 2 - 1;
-        vertex.y += Math.random() * 2;
-        vertex.z += Math.random() * 2 - 1;
-    }
-    material = new THREE.MeshPhongMaterial({vertexColors: THREE.VertexColors});
-    floor = new THREE.Mesh(geometry, material);
-    floor.receiveShadow = true;
-    scene.add(floor);
+
+    // geometry = new THREE.PlaneGeometry(500,500,200,200);
+    // geometry.rotateX(-Math.PI/2);
+    // for (var i = 0, l = geometry.faces.length; i < l; i++) {
+    //     var face = geometry.faces[i];
+    //     face.vertexColors[0] = new THREE.Color().setHSL(Math.random() * 0.15 + 0.35, 0.75, Math.random() * 0.45 + 0.15);
+    //     face.vertexColors[1] = new THREE.Color().setHSL(Math.random() * 0.15 + 0.35, 0.75, Math.random() * 0.45 + 0.15);
+    //     face.vertexColors[2] = new THREE.Color().setHSL(Math.random() * 0.15 + 0.35, 0.75, Math.random() * 0.45 + 0.15);
+    // }
+    // for ( var i = 0, l = geometry.vertices.length; i < l; i ++ ) {
+    //     var vertex = geometry.vertices[ i ];
+    //     vertex.x += Math.random() * 2 - 1;
+    //     vertex.y += Math.random() * 2;
+    //     vertex.z += Math.random() * 2 - 1;
+    // }
+    // material = new THREE.MeshPhongMaterial({vertexColors: THREE.VertexColors});
+    // floor = new THREE.Mesh(geometry, material);
+    // floor.receiveShadow = true;
+    // scene.add(floor);
+
+    var geo = new THREE.PlaneBufferGeometry(300,300,1000,1000);
+    geo.rotateX(-Math.PI/2);
+
+    var uvs = geo.attributes.uv.array;
+
+    for ( var i = 0; i < uvs.length; i ++ ) uvs[ i ] *= 8;
+
+    var loader = new THREE.TextureLoader();
+    var promises = [
+        promiseTexture("resources/textures/testing/dirt_COLOR.png", loader),
+        promiseTexture("resources/textures/testing/dirt_NRM.png", loader),
+        promiseTexture("resources/textures/testing/dirt_DISP.png", loader),
+        promiseTexture("resources/textures/testing/dirt_SPEC.png", loader)
+    ];
+
+    Promise.all(promises).then(textures => {
+        for (var i = 0; i < textures.length; i++) {
+            textures[i].mapping = THREE.UVMapping;
+            textures[i].wrapS = THREE.RepeatWrapping;
+            textures[i].wrapT = THREE.RepeatWrapping;
+        //     textures[i].repeat.x = 2;
+            // textures[i].repeat.y = 2;
+        }
+        var mat = new THREE.MeshPhongMaterial({
+            map: textures[0],
+            normalMap: textures[1],
+            displacementMap: textures[2],
+            displacementScale: 1,
+            specularMap: textures[3]
+        });
+        floor = new THREE.Mesh(geo, mat);
+        floor.receiveShadow = true;
+        scene.add(floor);
+    });
+}
+
+function promiseTexture(uri, loader) {
+    return new Promise((resolve, reject) => {
+        loader.load(uri, function(texture) {
+            resolve(texture);
+        })
+    });
 }
 
 function createTestingBox() {
@@ -487,7 +533,7 @@ function update() {
     }
 
     // update player movement
-    var speed = movement.speed ? MOVE_SPEED : MOVE_SPEED * SPRINT_MODIFIER;
+    var speed = movement.sprint ? MOVE_SPEED * SPRINT_MODIFIER : MOVE_SPEED;
 
     if (movement.forward) {
         velocity.z -= speed * delta;
@@ -516,6 +562,8 @@ function update() {
         orbs[i].object.rotation.y += orbs[i].rot.y * delta;
         orbs[i].object.rotation.z += orbs[i].rot.z * delta;
     }
+
+    objects[0].rotation.y += 10 * delta;
 
 
 
