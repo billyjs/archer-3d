@@ -12,12 +12,11 @@ const ORB_ROT_SPEED = 5;
 
 // ==============================================================
 // resources
-var soundShootFile = "resources/sounds/bow-release.wav";
-var bowFile = "./bow_rigged_material.json";
-var cubeMapPath = "resources/textures/cube/swedishRoyalCastle/";
-var grassFile = "resources/textures/grass.jpg";
-const tree1File = "tree1.json";
-const arrowFile = "arrow.json";
+const soundShootFile = "resources/sounds/bow-release.mp3";
+const bowFile = "./resources/models/bow.json";
+const tree1File = "./resources/models/tree1.json";
+const arrowFile = "./resources/models/arrow.json";
+const spacePath = "./resources/textures/space/";
 
 // ==============================================================
 // variables
@@ -80,7 +79,7 @@ function init() {
     scene = new THREE.Scene();
     scene.fog = new THREE.Fog(0x010101, 200, 300);
     scene.background = new THREE.CubeTextureLoader()
-        .setPath( 'resources/textures/' )
+        .setPath( spacePath )
         .load( [
             'space5.png',
             'space1.png',
@@ -121,7 +120,7 @@ function init() {
     renderer.setClearColor(0x010101);
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.type = THREE.PCFShadowMap;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.shadowMap.enabled = true;
     document.body.appendChild(renderer.domElement);
 
@@ -167,7 +166,7 @@ function cameraInit() {
     var aspect = window.innerWidth / window.innerHeight;
     var fov = 90; // TODO calculate dynamic fov
     camera = new THREE.PerspectiveCamera(fov, aspect, 0.1, 1000);
-    camera.position.y += 2;
+    // camera.position.y += 2;
 }
 
 function pointerLockInit() {
@@ -221,14 +220,12 @@ function audioInit() {
 
 function lightInit() {
     // TODO make lights look better, shadows, etc
-    light = new THREE.AmbientLight(0x404040, 0.7);
+    light = new THREE.AmbientLight(0x404040, 0.6);
     scene.add(light);
 
-    light = new THREE.PointLight(0xffffff, 1, 100);
-    light.position.set(0, 30, 0);
+    light = new THREE.PointLight(0xffffff, 1, 120);
+    light.position.set(0, 100, 0);
     light.castShadow = true;
-    light.shadow.camera.near = 0.3;
-    light.shadow.camera.far = 50;
     scene.add(light);
 }
 
@@ -424,10 +421,10 @@ function createFloorPlane() {
 
     var loader = new THREE.TextureLoader();
     var promises = [
-        promiseTexture("resources/textures/testing/dirt_COLOR.png", loader),
-        promiseTexture("resources/textures/testing/dirt_NRM.png", loader),
-        promiseTexture("resources/textures/testing/dirt_DISP.png", loader),
-        promiseTexture("resources/textures/testing/dirt_SPEC.png", loader)
+        promiseTexture("resources/textures/dirt/dirt_COLOR.png", loader),
+        promiseTexture("resources/textures/dirt/dirt_NRM.png", loader),
+        promiseTexture("resources/textures/dirt/dirt_DISP.png", loader),
+        promiseTexture("resources/textures/dirt/dirt_SPEC.png", loader)
     ];
 
     Promise.all(promises).then(textures => {
@@ -435,8 +432,6 @@ function createFloorPlane() {
             textures[i].mapping = THREE.UVMapping;
             textures[i].wrapS = THREE.RepeatWrapping;
             textures[i].wrapT = THREE.RepeatWrapping;
-        //     textures[i].repeat.x = 2;
-            // textures[i].repeat.y = 2;
         }
         var mat = new THREE.MeshPhongMaterial({
             map: textures[0],
