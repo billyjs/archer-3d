@@ -1,6 +1,8 @@
 // constants
 const MIN_ARROW_POWER = 50;
-const MAX_ARROWS = 10;
+const MAX_ARROWS = 5;
+const ARROW_LIFE = 500;
+const ARROW_SPEED = 100;
 
 const MOVE_SPEED = 200.0;
 const SPRINT_MODIFIER = 2;
@@ -14,6 +16,8 @@ var soundShootFile = "resources/sounds/bow-release.wav";
 var bowFile = "./bow_rigged_material.json";
 var cubeMapPath = "resources/textures/cube/swedishRoyalCastle/";
 var grassFile = "resources/textures/grass.jpg";
+const tree1File = "tree1.json";
+const arrowFile = "arrow.json";
 
 // ==============================================================
 // variables
@@ -42,13 +46,18 @@ var geometry, material, mesh, loader;
 var floor;
 var objects;
 var trees, orbs;
+var arrows;
+var meshes;
+
+// loaded objects
+var tree, bow, arrow;
 
 // renderer
 var renderer;
 
 // bow
 var drawingBow, bowPower;
-var bow, skeleton;
+var skeleton;
 
 var time;
 var movement;
@@ -89,12 +98,20 @@ function init() {
 
     // setup meshes
     objects = [];
-    meshesInit();
-
-    // create trees and orbs
+    arrows = [];
     trees = [];
     orbs = [];
-    createTrees(100);
+    meshes = {};
+    var loader = new THREE.JSONLoader();
+    var promises = [
+        promiseLoad(tree1File, loader),
+        promiseLoad(bowFile, loader),
+        promiseLoad(arrowFile, loader)
+
+    ];
+    loadObjects(promises, () => {
+        meshesInit();
+    });
 
     // setup lights
     lightInit();
@@ -122,6 +139,28 @@ function init() {
     document.addEventListener('mousedown', onMouseDown, false);
     document.addEventListener('mouseup', onMouseUp, false);
 
+}
+
+function loadObjects(promises, callback) {
+    Promise.all(promises).then(objs => {
+
+        tree = objs[0];
+        bow = objs[1];
+        arrow = objs[2];
+
+        callback();
+    });
+}
+
+function promiseLoad(file, loader) {
+    return new Promise((resolve, reject) => {
+        loader.load(file, (geometry, materials) => {
+            resolve({
+                geometry: geometry,
+                materials: materials
+            });
+        });
+    });
 }
 
 function cameraInit() {
@@ -196,36 +235,53 @@ function lightInit() {
 function meshesInit() {
     createFloorPlane();
     createTestingBox();
-
+    createTrees(100);
     createBow();
+    createArrow();
+}
+
+function createArrow() {
+    var material = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.3,
+        metalness: 1.0,
+        side: THREE.DoubleSide,
+        shading: THREE.FlatShading
+    });
+
+    var mesh = new THREE.Mesh(arrow.geometry, material);
+    meshes.bow.add(mesh);
+    mesh.position.set(1.2,0,-4);
+    mesh.rotateY(Math.PI);
+    mesh.visible = false;
+    meshes.arrow = mesh;
 }
 
 function createTrees(radius) {
-    var files = ["./tree1.json", "./tree1.json", "./tree1.json", "./tree1.json", "./tree1.json", "./tree1.json"];
-    for (var i = 0; i < files.length; i++) {
-        var theta = i * 2 * Math.PI / files.length;
+    var trees = [tree, tree, tree, tree, tree, tree];
+    for (var i = 0; i < trees.length; i++) {
+        var theta = i * 2 * Math.PI / trees.length;
         var x = radius * Math.cos(theta);
         var y = radius * Math.sin(theta);
-        createTree(files[i], x, y);
+        createTree(trees[i], x, y);
         createOrb(new THREE.Color().setHSL(Math.random(), 1, 0.8), x, y);
     }
 }
 
-function createTree(file, x, y) {
-    var loader = new THREE.JSONLoader();
-    loader.load(file, function(geometry, materials) {
-        var material = new THREE.MeshPhongMaterial({
-            color: 0x8B4513,
-            side: THREE.DoubleSide
-        });
-        var tree = new THREE.Mesh(geometry, material);
-        tree.castShadow = true;
-        tree.position.set(x, 0, y);
-        tree.rotateY(Math.random() * 2 * Math.PI);
-        scene.add(tree);
-        trees.push(tree);
-        objects.push(tree);
-    })
+function createTree(tree, x, y) {
+    var material = new THREE.MeshPhongMaterial({
+        color: 0x8B4513,
+        side: THREE.DoubleSide
+    });
+
+    var mesh = new THREE.Mesh(tree.geometry, material);
+
+    mesh.castShadow = true;
+    mesh.position.set(x, 0, y);
+    mesh.rotateY(Math.random() * 2 * Math.PI);
+    scene.add(mesh);
+    trees.push(mesh);
+    objects.push(mesh);
 }
 
 function createOrb(color, x, y) { // 0xffec89
@@ -253,35 +309,50 @@ function createOrb(color, x, y) { // 0xffec89
 }
 
 function createBow() {
-    loader = new THREE.JSONLoader();
-    loader.load(bowFile, loadBow);
-}
-
-function loadBow(geometry, materials) {
-    var format = '.jpg';
-    var urls = [
-        cubeMapPath + 'px' + format, cubeMapPath + 'nx' + format,
-        cubeMapPath + 'py' + format, cubeMapPath + 'ny' + format,
-        cubeMapPath + 'pz' + format, cubeMapPath + 'nz' + format
-    ];
-    var reflectionCube = new THREE.CubeTextureLoader().load( urls );
     var material = new THREE.MeshStandardMaterial({
         color: 0xffffff,
         roughness: 0.3,
         metalness: 1.0,
         skinning: true,
         side: THREE.DoubleSide,
-        shading: THREE.FlatShading,
-        envMap: reflectionCube,
-        envMapIntensity: 0.3
+        shading: THREE.FlatShading
     });
-    bow = new THREE.SkinnedMesh(geometry, material);
-    camera.add(bow);
-    skeleton = new THREE.SkeletonHelper(bow);
+
+    var mesh = new THREE.SkinnedMesh(bow.geometry, material);
+    mesh.rotateY(0.2);
+    camera.add(mesh);
+    skeleton = new THREE.SkeletonHelper(mesh);
     skeleton.bones[0].position.set(1,0,-4);
-    skeleton.bones[0].rotation.set(0,Math.PI/2,0);
-    // skeleton.bones[19].position.set(-1,0,0);
+    skeleton.bones[0].rotation.set(0, Math.PI/2, 0);
+    meshes.bow = mesh;
 }
+
+// function loadBow(geometry, materials) {
+//     var format = '.jpg';
+//     var urls = [
+//         cubeMapPath + 'px' + format, cubeMapPath + 'nx' + format,
+//         cubeMapPath + 'py' + format, cubeMapPath + 'ny' + format,
+//         cubeMapPath + 'pz' + format, cubeMapPath + 'nz' + format
+//     ];
+//     var reflectionCube = new THREE.CubeTextureLoader().load( urls );
+//     var material = new THREE.MeshStandardMaterial({
+//         color: 0xffffff,
+//         roughness: 0.3,
+//         metalness: 1.0,
+//         skinning: true,
+//         side: THREE.DoubleSide,
+//         shading: THREE.FlatShading,
+//         envMap: reflectionCube,
+//         envMapIntensity: 0.3
+//     });
+//     bow = new THREE.SkinnedMesh(geometry, material);
+//     bow.rotateY(0.2);
+//     camera.add(bow);
+//     skeleton = new THREE.SkeletonHelper(bow);
+//     skeleton.bones[0].position.set(1,0,-4);
+//     skeleton.bones[0].rotation.set(0,Math.PI/2,0);
+//     // skeleton.bones[19].position.set(-1,0,0);
+// }
 
 function createFloorPlane() {
     // var geo = new THREE.PlaneGeometry(200,200,100,100);
@@ -344,12 +415,12 @@ function createFloorPlane() {
     // floor.receiveShadow = true;
     // scene.add(floor);
 
-    var geo = new THREE.PlaneBufferGeometry(300,300,1000,1000);
+    var geo = new THREE.PlaneBufferGeometry(300,300,200,200);
     geo.rotateX(-Math.PI/2);
 
     var uvs = geo.attributes.uv.array;
 
-    for ( var i = 0; i < uvs.length; i ++ ) uvs[ i ] *= 8;
+    for ( var i = 0; i < uvs.length; i ++ ) uvs[ i ] *= 4;
 
     var loader = new THREE.TextureLoader();
     var promises = [
@@ -371,7 +442,7 @@ function createFloorPlane() {
             map: textures[0],
             normalMap: textures[1],
             displacementMap: textures[2],
-            displacementScale: 1,
+            displacementScale: 2,
             specularMap: textures[3]
         });
         floor = new THREE.Mesh(geo, mat);
@@ -483,6 +554,8 @@ function animate() {
     requestAnimationFrame(animate);
     if (controls.enabled) {
         update();
+    } else {
+        time = performance.now();
     }
     renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
     renderer.render(scene, camera);
@@ -492,6 +565,12 @@ function positionBow(power) {
     // power 0-100
     var string = (2 * power / - 100) - 1;
     var rot = 0.15;
+    meshes.arrow.position.z = -string + -5;
+    if (power === 0) {
+        meshes.arrow.visible = false;
+    } else {
+        meshes.arrow.visible = true;
+    }
     skeleton.bones[19].position.set(string,0,0);
     skeleton.bones[2].rotation.z = power * rot / 100;
     skeleton.bones[3].rotation.z = power * rot / 100;
@@ -506,11 +585,48 @@ function positionBow(power) {
     skeleton.bones[15].rotation.z = power * -rot / 100;
 }
 
-function fireArrow() {
+function fireArrow(dir) {
     console.log("fired");
     soundShoot.play();
     bowPower = 0;
     positionBow(bowPower);
+    var material = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.3,
+        metalness: 1.0,
+        skinning: true,
+        side: THREE.DoubleSide,
+        shading: THREE.FlatShading
+    });
+    var a = new THREE.Mesh(arrow.geometry, material);
+    a.castShadow = true;
+    scene.add(a);
+    // var dir = controls.getDirection;
+    // console.log(dir);
+    // var v = new THREE.Vector3();
+    // controls.getDirection(v);
+    // console.log(controls.getDirection);
+    // a.rotation.x = v.x;
+    // a.rotation.y = v.y;
+    // a.rotation.z = v.z;
+
+    var newDir = new THREE.Vector3();
+    controls.getDirection(newDir);
+    var pos = new THREE.Vector3();
+    pos.addVectors(newDir, a.position);
+    a.lookAt(pos);
+
+    scene.updateMatrixWorld(true);
+    var position = new THREE.Vector3();
+    position.getPositionFromMatrix( meshes.bow.matrixWorld );
+    a.position.copy(position);
+    a.translateZ(3);
+
+    arrows.unshift({
+        mesh: a,
+        dir: newDir,
+        ttl: ARROW_LIFE
+    })
 }
 
 function update() {
@@ -564,6 +680,24 @@ function update() {
     }
 
     objects[0].rotation.y += 10 * delta;
+
+    // update arrows
+    var removes = [];
+    while (arrows.length > MAX_ARROWS) {
+        scene.remove(arrows[arrows.length - 1].mesh);
+        arrows.pop();
+    }
+    for (var i = 0; i < arrows.length; i++) {
+        arrows[i].mesh.translateZ(ARROW_SPEED * delta);
+        arrows[i].ttl -= 100 * delta;
+        if (arrows[i].ttl <= 0) {
+            removes.push(i);
+        }
+    }
+    for (var i = 0; i < removes.length; i++) {
+        scene.remove(arrows[removes[i]].mesh);
+        arrows.splice(removes[i], 1);
+    }
 
 
 
